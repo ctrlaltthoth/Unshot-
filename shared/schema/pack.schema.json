@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unshot.app/schema/pack.json",
+  "title": "Pack",
+  "type": "object",
+  "required": ["id", "title", "type", "createdAt", "assetIds", "artifacts", "exports"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "type": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "assetIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "artifact.schema.json" }
+    },
+    "exports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "contentType", "createdAt"],
+        "properties": {
+          "path": { "type": "string" },
+          "contentType": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

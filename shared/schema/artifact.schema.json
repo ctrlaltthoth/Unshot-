@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unshot.app/schema/artifact.json",
+  "title": "Artifact",
+  "type": "object",
+  "required": ["id", "assetId", "type", "payload"],
+  "properties": {
+    "id": { "type": "string" },
+    "assetId": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["ExpenseRow", "ShoppingList", "EventCard", "PackSummary", "Snippet"]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    }
+  }
+}
