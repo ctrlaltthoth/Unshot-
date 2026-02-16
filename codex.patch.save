@@ -1,0 +1,6 @@
+ls -lh codex.patch
+wc -l codex.patch
+head -n 10 codex.patch
+grep -n "^diff --git" -m 3 codex.patch
+
+
