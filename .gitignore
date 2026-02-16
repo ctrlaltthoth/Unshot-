@@ -1,7 +1,8 @@
-__pycache__/
-*.pyc
-node_modules/
-.next/
 .DS_Store
-
-dist/
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace
+*.xcuserdata/
+node_modules/
+.env
