@@ -1,5 +1,1191 @@
-ls -lh codex.patch
-wc -l codex.patch
-head -n 10 codex.patch
-grep -n "^diff --git" -m 3 codex.patch
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000000000000000000000000000000000000..2d0743c39b4b643dfa62cde172330f951f31b226
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,7 @@
++__pycache__/
++*.pyc
++node_modules/
++.next/
++.DS_Store
++
++dist/
+diff --git a/README.md b/README.md
+index 79c0873ce951b1cb9b433535fe190c74467c844d..52e08f01b2d3de9f492288c271b91b848f59eb3e 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,19 @@
+-# Welcome to GitHub Desktop!
++# Unshot
+ 
+-This is your README. READMEs are where you can communicate what your project is and how to use it.
++Turn screenshots into useful things.
+ 
+-Write your name on line 6, save it, and then head back to GitHub Desktop.
++- Receipts -> expenses
++- Recipes -> shopping lists
++- Tickets/confirmations -> packs
++
++## Privacy-first MVP
++- On-device OCR and parsing.
++- No external AI calls.
++- No analytics SDKs.
++
++## Repo
++- `ios/Unshot/` SwiftUI app architecture and conversion pipeline.
++- `web/unshot-web/` Pack hub for upload, render, merge, export.
++- `shared/schema/` Shared JSON schemas.
++- `docs/` Architecture, indexing, privacy, App Store checklist, QA.
++- `tests/` classifier/parsers/dedupe tests.
+diff --git a/docs/APP_STORE_CHECKLIST.md b/docs/APP_STORE_CHECKLIST.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..86ce480c3bd50d711bf139c35906e2ed92db5cf9
+--- /dev/null
++++ b/docs/APP_STORE_CHECKLIST.md
+@@ -0,0 +1,20 @@
++# App Store Checklist
++
++## Privacy details
++- Data linked to user: none in MVP.
++- Data used for tracking: none.
++- Photos access: user-selected (Picker-first), optional broad/limited library for screenshots album sync.
++
++## Permission strings
++- `NSPhotoLibraryUsageDescription`: "Unshot reads screenshots you select to convert them into expenses, shopping lists, and travel/event packs on your device."
++- `NSPhotoLibraryAddUsageDescription`: "Unshot can help remove duplicates by moving selected photos to Recently Deleted."
++
++## Review posture
++- Explain picker-first onboarding in submission notes.
++- Clarify that OCR uses on-device Vision framework.
++- Clarify no external AI APIs are used.
++
++## Compliance files to keep updated
++- `docs/PRIVACY.md`
++- `docs/APP_STORE_CHECKLIST.md`
++- `docs/INDEXING_PIPELINE.md`
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cfe9edd0bbd2f9d1e42051670f49e21e9af8e49
+--- /dev/null
++++ b/docs/ARCHITECTURE.md
+@@ -0,0 +1,30 @@
++# Unshot Architecture
++
++## Core thesis
++Unshot is a converter, not a cleaner. The product surface is optimized for "ready artifacts" from screenshots (expenses, shopping lists, event cards, pack summaries).
++
++## Monorepo layout
++- `ios/Unshot/`: SwiftUI iOS app.
++- `web/unshot-web/`: Next.js App Router companion for rendering and merging exported packs.
++- `shared/schema/`: JSON schemas for Pack and Artifact.
++- `tests/`: classifier, parser, and dedupe tests.
++
++## iOS storage choice: GRDB (SQLite)
++We choose SQLite via GRDB for:
++1. deterministic migrations,
++2. small local footprint,
++3. direct SQL control for indexing and dedupe scans,
++4. simple portability to web/export workflows.
++
++## Pipeline order (required build order)
++1. Vertical slice: Picker import -> fast OCR -> categorize -> home tiles -> list -> detail.
++2. Extraction artifacts.
++3. Packs and export.
++4. Dedupe.
++5. Optional PhotoKit screenshots album sync.
++6. Web companion pack rendering + merge/export.
++
++## Concurrency and resiliency
++- Actor-backed job queue with throttling hooks.
++- Persistent job state + backoff + cancellation.
++- Low Power Mode can reduce concurrency and skip accurate OCR pass.
+diff --git a/docs/INDEXING_PIPELINE.md b/docs/INDEXING_PIPELINE.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f5b61d522253b43232f116eb4a91702997d447d
+--- /dev/null
++++ b/docs/INDEXING_PIPELINE.md
+@@ -0,0 +1,26 @@
++# Indexing Pipeline
++
++## 1) Ingestion strategy (Picker-first)
++- Default onboarding uses `PHPickerViewController` batch selection.
++- This avoids broad Photos permission and respects limited-library controls.
++- Optional upgrade: connect PhotoKit screenshots smart album (`PHAssetCollectionSubtype.smartAlbumScreenshots`) for continuous sync.
++
++## 2) OCR (Vision, on-device)
++- `VNRecognizeTextRequest` fast pass runs first.
++- If fast quality is insufficient (short text / low confidence), run accurate pass.
++- OCR output is stored as `OCRDocument` with quality and version markers.
++
++## 3) Classification + extraction
++- Deterministic keyword classifier assigns categories.
++- Extractor plugins generate artifacts (ExpenseRow, ShoppingList, EventCard, PackSummary, Snippet).
++- No external AI calls.
++
++## 4) Incremental indexing
++- Cache per-asset OCR/version fingerprints.
++- Skip unchanged assets.
++- Resume on next launch using persistent job queue state.
++
++## 5) Performance bars
++- Show progressive category counts and ready artifacts while indexing.
++- Target visible value under 60 seconds for 50 screenshots.
++- Never block UI; user can cancel indexing.
+diff --git a/docs/PRIVACY.md b/docs/PRIVACY.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4975166243fd8386515b8f97eaf0a141121f714d
+--- /dev/null
++++ b/docs/PRIVACY.md
+@@ -0,0 +1,21 @@
++# Unshot Privacy Pledge
++
++## Plain-language promise
++- On-device by default.
++- No screenshot uploads.
++- No analytics SDKs in MVP.
++- No ad tracking.
++
++## What data is processed
++- Selected screenshots from Photos Picker (or optional Screenshots album if user enables it).
++- OCR text and structured artifacts generated locally.
++- Exported files are user-initiated and stay in user-controlled destinations.
++
++## What is not collected
++- No remote image processing.
++- No behavioral analytics events tied to user identity.
++- No third-party ad identifiers.
++
++## Deletion behavior
++- Duplicate cleanup uses Photos deletion APIs so items move to "Recently Deleted".
++- App-local indexing metadata can be cleared from app settings.
+diff --git a/docs/QA.md b/docs/QA.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..934d39c1575526ed5d4713d25e199769139d3616
+--- /dev/null
++++ b/docs/QA.md
+@@ -0,0 +1,16 @@
++# QA Plan
++
++## Edge cases
++- Limited Photos access and revoked access mid-session.
++- OCR low-quality screenshots and multilingual text.
++- Receipts with multiple totals or tip lines.
++- Ingredient lists with unicode fractions.
++- Tickets with missing seat/gate lines.
++- Duplicate groups with edited/cropped variants.
++- App termination mid-index and resume behavior.
++
++## Test plan
++- Unit tests for classifier category scoring.
++- Parser tests for receipt totals and ingredient extraction.
++- Dedupe tests for exact and near duplicate scoring behavior.
++- Manual pass for onboarding, conversion actions, pack export, and web upload/merge.
+diff --git a/docs/TRANSFER_TO_REPLIT.md b/docs/TRANSFER_TO_REPLIT.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..7301517f70607f919eb38a64e30e389c8295b7be
+--- /dev/null
++++ b/docs/TRANSFER_TO_REPLIT.md
+@@ -0,0 +1,40 @@
++# Transfer to Replit
++
++Use the packaging script to build a clean zip you can upload to Replit.
++
++## Build archive
++
++```bash
++./scripts/package_for_replit.sh
++```
++
++This writes:
++
++- `dist/unshot-replit-<timestamp>.zip`
++- `dist/unshot-replit-latest.zip`
++
++## Replit import
++
++1. Open Replit and create/import a project.
++2. Upload `dist/unshot-replit-latest.zip`.
++3. Unzip it in the Replit shell:
++
++```bash
++unzip unshot-replit-latest.zip -d unshot
++cd unshot
++```
++
++4. Web companion (optional):
++
++```bash
++cd web/unshot-web
++npm install
++npm run dev
++```
++
++5. Python tests:
++
++```bash
++cd ../../tests
++python -m pytest
++```
+diff --git a/ios/Unshot/Sources/App/UnshotApp.swift b/ios/Unshot/Sources/App/UnshotApp.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d8b454af89afe96b848aa382843a3490972060b
+--- /dev/null
++++ b/ios/Unshot/Sources/App/UnshotApp.swift
+@@ -0,0 +1,10 @@
++import SwiftUI
++
++@main
++struct UnshotApp: App {
++    var body: some Scene {
++        WindowGroup {
++            HomeView()
++        }
++    }
++}
+diff --git a/ios/Unshot/Sources/Core/Classifier.swift b/ios/Unshot/Sources/Core/Classifier.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..06e242b3aa6912e22039b9982ba605b3305f4075
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/Classifier.swift
+@@ -0,0 +1,23 @@
++import Foundation
++
++public struct Classifier {
++    public init() {}
++
++    public func classify(text: String) -> (Category, Double) {
++        let lower = text.lowercased()
++        let rules: [(Category, [String])] = [
++            (.receipt, ["subtotal", "tax", "receipt", "total"]),
++            (.recipe, ["ingredients", "instructions", "preheat", "serves"]),
++            (.ticket, ["gate", "seat", "boarding", "ticket"]),
++            (.confirmation, ["confirmation", "order", "booking", "reference"]),
++            (.shoppingList, ["shopping list", "buy", "groceries"])
++        ]
++
++        let scored = rules.map { category, keywords in
++            let count = keywords.filter { lower.contains($0) }.count
++            return (category, min(1.0, Double(count) / Double(keywords.count)))
++        }
++
++        return scored.max(by: { $0.1 < $1.1 }) ?? (.misc, 0.0)
++    }
++}
+diff --git a/ios/Unshot/Sources/Core/DedupeService.swift b/ios/Unshot/Sources/Core/DedupeService.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..764126f10f4ebf4cfaaf29315683acda5f4a6746
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/DedupeService.swift
+@@ -0,0 +1,25 @@
++import Foundation
++import Vision
++
++public struct DuplicateGroup: Identifiable {
++    public let id: String
++    public let assetIds: [String]
++    public let reason: String
++}
++
++public final class DedupeService {
++    public init() {}
++
++    public func exactDuplicateGroups(assets: [AssetRef]) -> [DuplicateGroup] {
++        let grouped = Dictionary(grouping: assets) { "\($0.id)|\($0.pixelWidth)x\($0.pixelHeight)|\($0.fileSize)|\($0.createdAt.timeIntervalSince1970)" }
++        return grouped.values.filter { $0.count > 1 }.map {
++            DuplicateGroup(id: UUID().uuidString, assetIds: $0.map(\.id), reason: "exact-metadata")
++        }
++    }
++
++    public func nearDuplicateScore(_ lhs: VNFeaturePrintObservation, _ rhs: VNFeaturePrintObservation) -> Float {
++        var distance: Float = 100
++        try? lhs.computeDistance(&distance, to: rhs)
++        return max(0, 1 - min(1, distance / 20))
++    }
++}
+diff --git a/ios/Unshot/Sources/Core/Extractors.swift b/ios/Unshot/Sources/Core/Extractors.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ed72445fa6586b4ef2bde2cf3552ae03b9d479a
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/Extractors.swift
+@@ -0,0 +1,123 @@
++import Foundation
++
++public struct ExtractionContext {
++    public let text: String
++    public let entities: ExtractedEntity
++    public let metadata: AssetRef
++}
++
++public protocol Extractor {
++    var name: String { get }
++    func canHandle(context: ExtractionContext) -> Double
++    func extract(context: ExtractionContext) -> [Artifact]
++}
++
++public struct ReceiptExtractor: Extractor {
++    public let name = "ReceiptExtractor"
++
++    public func canHandle(context: ExtractionContext) -> Double {
++        let text = context.text.lowercased()
++        let receiptSignals = ["subtotal", "tax", "total", "visa", "thank you"]
++        return min(1, Double(receiptSignals.filter { text.contains($0) }.count) * 0.2)
++    }
++
++    public func extract(context: ExtractionContext) -> [Artifact] {
++        guard let total = context.entities.currencyTotals.max(by: { $0.value < $1.value }) else { return [] }
++        return [Artifact(id: UUID().uuidString, assetId: context.metadata.id, type: .expenseRow, payload: [
++            "date": ISO8601DateFormatter().string(from: context.metadata.createdAt),
++            "merchant": inferMerchant(from: context.text),
++            "total": String(format: "%.2f", total.value),
++            "currency": total.currency,
++            "notes": "Auto-extracted on-device"
++        ])]
++    }
++
++    private func inferMerchant(from text: String) -> String {
++        text.split(separator: "\n").first.map(String.init) ?? "Unknown"
++    }
++}
++
++public struct RecipeExtractor: Extractor {
++    public let name = "RecipeExtractor"
++
++    public func canHandle(context: ExtractionContext) -> Double {
++        let t = context.text.lowercased()
++        let recipeSignals = ["ingredients", "preheat", "serves", "teaspoon", "cup"]
++        return min(1, Double(recipeSignals.filter { t.contains($0) }.count) * 0.25)
++    }
++
++    public func extract(context: ExtractionContext) -> [Artifact] {
++        let items = context.text
++            .split(separator: "\n")
++            .filter { $0.contains("-") || $0.rangeOfCharacter(from: .decimalDigits) != nil }
++            .prefix(20)
++            .map { $0.replacingOccurrences(of: "-", with: "").trimmingCharacters(in: .whitespaces) }
++            .joined(separator: " | ")
++        return [Artifact(id: UUID().uuidString, assetId: context.metadata.id, type: .shoppingList, payload: [
++            "items": items,
++            "source": "recipe"
++        ])]
++    }
++}
++
++public struct TicketExtractor: Extractor {
++    public let name = "TicketExtractor"
++
++    public func canHandle(context: ExtractionContext) -> Double {
++        let t = context.text.lowercased()
++        let signals = ["gate", "seat", "boarding", "admit one", "section"]
++        return min(1, Double(signals.filter { t.contains($0) }.count) * 0.25)
++    }
++
++    public func extract(context: ExtractionContext) -> [Artifact] {
++        [Artifact(id: UUID().uuidString, assetId: context.metadata.id, type: .eventCard, payload: [
++            "dateTime": ISO8601DateFormatter().string(from: context.metadata.createdAt),
++            "venue": guessField(in: context.text, key: "venue"),
++            "seatOrGate": guessSeatOrGate(in: context.text),
++            "referenceCode": guessReference(in: context.text)
++        ])]
++    }
++
++    private func guessField(in text: String, key: String) -> String {
++        text.split(separator: "\n").first(where: { $0.lowercased().contains(key) }).map(String.init) ?? "Unknown"
++    }
++
++    private func guessSeatOrGate(in text: String) -> String {
++        text.split(separator: "\n").first(where: { $0.lowercased().contains("seat") || $0.lowercased().contains("gate") }).map(String.init) ?? "Unknown"
++    }
++
++    private func guessReference(in text: String) -> String {
++        text.split(separator: " ").first(where: { $0.count >= 6 && $0.rangeOfCharacter(from: .letters) != nil && $0.rangeOfCharacter(from: .decimalDigits) != nil }).map(String.init) ?? "N/A"
++    }
++}
++
++public struct ConfirmationExtractor: Extractor {
++    public let name = "ConfirmationExtractor"
++
++    public func canHandle(context: ExtractionContext) -> Double {
++        let t = context.text.lowercased()
++        let signals = ["confirmation", "order #", "booking", "reference", "itinerary"]
++        return min(1, Double(signals.filter { t.contains($0) }.count) * 0.2)
++    }
++
++    public func extract(context: ExtractionContext) -> [Artifact] {
++        [Artifact(id: UUID().uuidString, assetId: context.metadata.id, type: .packSummary, payload: [
++            "headline": context.text.split(separator: "\n").prefix(2).joined(separator: " "),
++            "urls": context.entities.urls.joined(separator: ", "),
++            "emails": context.entities.emails.joined(separator: ", ")
++        ])]
++    }
++}
++
++public struct GenericExtractor: Extractor {
++    public let name = "GenericExtractor"
++
++    public func canHandle(context: ExtractionContext) -> Double { 0.1 }
++
++    public func extract(context: ExtractionContext) -> [Artifact] {
++        [Artifact(id: UUID().uuidString, assetId: context.metadata.id, type: .snippet, payload: [
++            "snippet": String(context.text.prefix(220)),
++            "urls": context.entities.urls.joined(separator: ", ")
++        ])]
++    }
++}
+diff --git a/ios/Unshot/Sources/Core/JobQueue.swift b/ios/Unshot/Sources/Core/JobQueue.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..002318b6ef5c862cf16858b3d9e4bd2344b5dc49
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/JobQueue.swift
+@@ -0,0 +1,69 @@
++import Foundation
++
++public actor IndexingJobQueue {
++    public enum JobState: String {
++        case queued
++        case running
++        case cancelled
++        case failed
++        case complete
++    }
++
++    public struct Job: Identifiable {
++        public let id: String
++        public let assetId: String
++        public var attempts: Int
++        public var state: JobState
++
++        public init(assetId: String) {
++            self.id = UUID().uuidString
++            self.assetId = assetId
++            self.attempts = 0
++            self.state = .queued
++        }
++    }
++
++    private var queue: [Job] = []
++    private var cancelled: Set<String> = []
++    private let maxAttempts = 3
++
++    public func enqueue(assetIds: [String]) {
++        queue.append(contentsOf: assetIds.map(Job.init))
++    }
++
++    public func cancel(assetId: String) {
++        cancelled.insert(assetId)
++    }
++
++    public func next() async -> Job? {
++        guard !queue.isEmpty else { return nil }
++        var job = queue.removeFirst()
++        if cancelled.contains(job.assetId) {
++            job.state = .cancelled
++            return job
++        }
++        job.state = .running
++        return job
++    }
++
++    public func complete(job: Job) {
++        // persistence hook for SQLite/GRDB in production
++        _ = job
++    }
++
++    public func fail(job: Job) {
++        var failedJob = job
++        failedJob.attempts += 1
++        if failedJob.attempts < maxAttempts {
++            let delay = UInt64(pow(2.0, Double(failedJob.attempts)) * 250_000_000)
++            Task {
++                try? await Task.sleep(nanoseconds: delay)
++                await self.requeue(job: failedJob)
++            }
++        }
++    }
++
++    private func requeue(job: Job) {
++        queue.append(job)
++    }
++}
+diff --git a/ios/Unshot/Sources/Core/Models.swift b/ios/Unshot/Sources/Core/Models.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..9baa159db1d449f4d9affba727aebb5d009bb705
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/Models.swift
+@@ -0,0 +1,105 @@
++import Foundation
++
++public enum ImportSource: String, Codable {
++    case picker
++    case photokit
++}
++
++public enum OCRQuality: String, Codable {
++    case fast
++    case accurate
++}
++
++public enum AssetMediaType: String, Codable {
++    case image
++    case livePhoto
++    case unknown
++}
++
++public struct AssetRef: Codable, Identifiable, Hashable {
++    public let id: String
++    public let createdAt: Date
++    public let pixelWidth: Int
++    public let pixelHeight: Int
++    public let fileSize: Int64
++    public let mediaType: AssetMediaType
++    public let importSource: ImportSource
++}
++
++public struct OCRDocument: Codable, Identifiable {
++    public let id: String
++    public let assetId: String
++    public let fullText: String
++    public let blocks: [String]
++    public let languageHints: [String]
++    public let createdAt: Date
++    public let ocrVersion: String
++    public let quality: OCRQuality
++}
++
++public struct ExtractedEntity: Codable {
++    public let assetId: String
++    public let urls: [String]
++    public let phones: [String]
++    public let emails: [String]
++    public let detectedDates: [DetectedDate]
++    public let currencyTotals: [DetectedCurrencyTotal]
++}
++
++public struct DetectedDate: Codable {
++    public let value: Date
++    public let confidence: Double
++}
++
++public struct DetectedCurrencyTotal: Codable {
++    public let value: Double
++    public let currency: String
++    public let confidence: Double
++}
++
++public enum Category: String, Codable, CaseIterable {
++    case receipt = "Receipt"
++    case recipe = "Recipe"
++    case ticket = "Ticket"
++    case confirmation = "Confirmation"
++    case shoppingList = "ShoppingList"
++    case misc = "Misc"
++}
++
++public struct Classification: Codable {
++    public let assetId: String
++    public let category: Category
++    public let confidence: Double
++    public let userOverrideCategory: Category?
++}
++
++public enum ArtifactType: String, Codable {
++    case expenseRow = "ExpenseRow"
++    case shoppingList = "ShoppingList"
++    case eventCard = "EventCard"
++    case packSummary = "PackSummary"
++    case snippet = "Snippet"
++}
++
++public struct Artifact: Codable, Identifiable {
++    public let id: String
++    public let assetId: String
++    public let type: ArtifactType
++    public let payload: [String: String]
++}
++
++public struct Pack: Codable, Identifiable {
++    public let id: String
++    public let title: String
++    public let type: String
++    public let createdAt: Date
++    public let assetIds: [String]
++    public let artifacts: [Artifact]
++    public let exports: [PackExport]
++}
++
++public struct PackExport: Codable {
++    public let path: String
++    public let contentType: String
++    public let createdAt: Date
++}
+diff --git a/ios/Unshot/Sources/Core/OCRPipeline.swift b/ios/Unshot/Sources/Core/OCRPipeline.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..24706124b5cb86198ba0c4a1105788e0eb7499b0
+--- /dev/null
++++ b/ios/Unshot/Sources/Core/OCRPipeline.swift
+@@ -0,0 +1,36 @@
++import Foundation
++import Vision
++
++public final class OCRPipeline {
++    public init() {}
++
++    public func recognizeText(cgImage: CGImage) async throws -> OCRDocument {
++        let fast = try performRequest(cgImage: cgImage, level: .fast)
++        if fast.fullText.count > 60 {
++            return fast
++        }
++        return try performRequest(cgImage: cgImage, level: .accurate)
++    }
++
++    private func performRequest(cgImage: CGImage, level: VNRequestTextRecognitionLevel) throws -> OCRDocument {
++        let request = VNRecognizeTextRequest()
++        request.recognitionLevel = level
++        request.usesLanguageCorrection = true
++
++        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
++        try handler.perform([request])
++        let observations = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
++        let text = observations.joined(separator: "\n")
++
++        return OCRDocument(
++            id: UUID().uuidString,
++            assetId: UUID().uuidString,
++            fullText: text,
++            blocks: observations,
++            languageHints: [],
++            createdAt: Date(),
++            ocrVersion: "vision-v1",
++            quality: level == .fast ? .fast : .accurate
++        )
++    }
++}
+diff --git a/ios/Unshot/Sources/Features/HomeView.swift b/ios/Unshot/Sources/Features/HomeView.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..86049723ba022403c5527c4a72f176c349a69f41
+--- /dev/null
++++ b/ios/Unshot/Sources/Features/HomeView.swift
+@@ -0,0 +1,88 @@
++import SwiftUI
++
++struct HomeView: View {
++    @State private var indexing = false
++
++    private let tiles: [(String, String)] = [
++        ("Receipts", "6 (4 totals ready)"),
++        ("Recipes", "5 (3 shopping lists ready)"),
++        ("Tickets", "2 (2 event cards ready)"),
++        ("Confirmations", "3 (3 packs ready)")
++    ]
++
++    var body: some View {
++        NavigationStack {
++            List {
++                Section("Convert screenshots into useful things") {
++                    Button("Select screenshots") {}
++                    Button("Connect Screenshots Album") {}
++                        .foregroundStyle(.secondary)
++                }
++
++                Section("Categories") {
++                    ForEach(tiles, id: \.0) { tile in
++                        NavigationLink {
++                            CategoryListView(title: tile.0)
++                        } label: {
++                            HStack {
++                                Text(tile.0)
++                                Spacer()
++                                Text(tile.1)
++                                    .foregroundStyle(.secondary)
++                            }
++                        }
++                    }
++                }
++
++                if indexing {
++                    Section {
++                        HStack {
++                            ProgressView()
++                            Text("Indexing screenshots…")
++                            Spacer()
++                            Button("Cancel") { indexing = false }
++                        }
++                    }
++                }
++            }
++            .navigationTitle("Unshot")
++            .searchable(text: .constant(""))
++        }
++    }
++}
++
++struct CategoryListView: View {
++    let title: String
++
++    var body: some View {
++        List {
++            Text("Filters: date range, has total, has URL, converted")
++            Text("Sort: newest, highest confidence, most useful")
++            NavigationLink("Sample item") {
++                DetailView()
++            }
++        }
++        .navigationTitle(title)
++    }
++}
++
++struct DetailView: View {
++    var body: some View {
++        List {
++            Section("Extracted Fields") {
++                Text("Total: $45.80")
++                Text("Date: 2026-02-10")
++                Text("URL: https://example.com")
++            }
++            Section("OCR Text") {
++                Text("Collapsed OCR preview…")
++            }
++            Section {
++                Button("Convert") {}
++                Button("Add to Pack") {}
++                Button("Export") {}
++            }
++        }
++        .navigationTitle("Detail")
++    }
++}
+diff --git a/ios/Unshot/Unshot.xcodeproj/project.pbxproj b/ios/Unshot/Unshot.xcodeproj/project.pbxproj
+new file mode 100644
+index 0000000000000000000000000000000000000000..be49fd675d799bef793807e3f95c4a133fb6dcb2
+--- /dev/null
++++ b/ios/Unshot/Unshot.xcodeproj/project.pbxproj
+@@ -0,0 +1,8 @@
++// !$*UTF8*$!
++{
++	archiveVersion = 1;
++	classes = {};
++	objectVersion = 56;
++	objects = {};
++	rootObject = 000000000000000000000000;
++}
+diff --git a/scripts/package_for_replit.sh b/scripts/package_for_replit.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..7fcbe9f0cf43950989bc5eacd7d8e66e316751fe
+--- /dev/null
++++ b/scripts/package_for_replit.sh
+@@ -0,0 +1,20 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++cd "$ROOT_DIR"
++
++STAMP="$(date +%Y%m%d-%H%M%S)"
++OUT="dist/unshot-replit-${STAMP}.zip"
++LATEST="dist/unshot-replit-latest.zip"
++
++mkdir -p dist
++
++zip -r "$OUT" \
++  ios web shared docs tests README.md .gitignore \
++  -x "*/__pycache__/*" "*.pyc" "*/.next/*" "*/node_modules/*" "*.DS_Store" >/dev/null
++
++cp "$OUT" "$LATEST"
++
++echo "$OUT"
++echo "$LATEST"
+diff --git a/shared/schema/artifact.schema.json b/shared/schema/artifact.schema.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..3861fb358893c7d26614b6d7a4cd122866a7ea28
+--- /dev/null
++++ b/shared/schema/artifact.schema.json
+@@ -0,0 +1,19 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://unshot.app/schema/artifact.json",
++  "title": "Artifact",
++  "type": "object",
++  "required": ["id", "assetId", "type", "payload"],
++  "properties": {
++    "id": { "type": "string" },
++    "assetId": { "type": "string" },
++    "type": {
++      "type": "string",
++      "enum": ["ExpenseRow", "ShoppingList", "EventCard", "PackSummary", "Snippet"]
++    },
++    "payload": {
++      "type": "object",
++      "additionalProperties": { "type": ["string", "number", "boolean"] }
++    }
++  }
++}
+diff --git a/shared/schema/pack.schema.json b/shared/schema/pack.schema.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..76f9e3b9cc363acc949ed9fe5755864b7f1f03f5
+--- /dev/null
++++ b/shared/schema/pack.schema.json
+@@ -0,0 +1,33 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://unshot.app/schema/pack.json",
++  "title": "Pack",
++  "type": "object",
++  "required": ["id", "title", "type", "createdAt", "assetIds", "artifacts", "exports"],
++  "properties": {
++    "id": { "type": "string" },
++    "title": { "type": "string" },
++    "type": { "type": "string" },
++    "createdAt": { "type": "string", "format": "date-time" },
++    "assetIds": {
++      "type": "array",
++      "items": { "type": "string" }
++    },
++    "artifacts": {
++      "type": "array",
++      "items": { "$ref": "artifact.schema.json" }
++    },
++    "exports": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["path", "contentType", "createdAt"],
++        "properties": {
++          "path": { "type": "string" },
++          "contentType": { "type": "string" },
++          "createdAt": { "type": "string", "format": "date-time" }
++        }
++      }
++    }
++  }
++}
+diff --git a/tests/test_classifier.py b/tests/test_classifier.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..51f807e6ca79123e777e0145fa85e1f03cb45166
+--- /dev/null
++++ b/tests/test_classifier.py
+@@ -0,0 +1,13 @@
++from unshot_core import classify
++
++
++def test_receipt_classification():
++    category, confidence = classify("Receipt\nSubtotal 8.00\nTax 1.00\nTotal 9.00")
++    assert category == "Receipt"
++    assert confidence >= 0.5
++
++
++def test_ticket_classification():
++    category, confidence = classify("Boarding pass\nGate A12\nSeat 14C")
++    assert category == "Ticket"
++    assert confidence >= 0.5
+diff --git a/tests/test_dedupe.py b/tests/test_dedupe.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1a3c87d49d4d89ca8f5bdf3ebb44971c9c205e6b
+--- /dev/null
++++ b/tests/test_dedupe.py
+@@ -0,0 +1,17 @@
++from unshot_core import Asset, exact_dupe_groups, near_dupe_score
++
++
++def test_exact_dupes_grouped():
++    assets = [
++        Asset("a", (100, 100), 2000, 10),
++        Asset("a", (100, 100), 2000, 10),
++        Asset("b", (120, 120), 2200, 11),
++    ]
++    groups = exact_dupe_groups(assets)
++    assert len(groups) == 1
++    assert groups[0] == ["a", "a"]
++
++
++def test_near_dupe_score():
++    assert near_dupe_score(0.5) > 0.9
++    assert near_dupe_score(30) == 0.0
+diff --git a/tests/test_parsers.py b/tests/test_parsers.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..31351b970f85a23439d8ee022c30b17190828a72
+--- /dev/null
++++ b/tests/test_parsers.py
+@@ -0,0 +1,12 @@
++from unshot_core import parse_currency_totals, parse_ingredients
++
++
++def test_receipt_total_parser():
++    totals = parse_currency_totals("Subtotal 12.00\nTax 1.20\nTotal: 13.20")
++    assert totals[-1] == 13.20
++
++
++def test_ingredient_parser():
++    items = parse_ingredients("Ingredients\n- 2 eggs\n- 1 cup milk\nMix")
++    assert "2 eggs" in items
++    assert "1 cup milk" in items
+diff --git a/tests/unshot_core.py b/tests/unshot_core.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c3bc336a99a12f334d9c937ef6cb1a8767db04b
+--- /dev/null
++++ b/tests/unshot_core.py
+@@ -0,0 +1,51 @@
++import re
++from dataclasses import dataclass
++
++
++CATEGORIES = {
++    "Receipt": ["subtotal", "tax", "receipt", "total"],
++    "Recipe": ["ingredients", "instructions", "preheat", "serves"],
++    "Ticket": ["gate", "seat", "boarding", "ticket"],
++    "Confirmation": ["confirmation", "order", "booking", "reference"],
++    "ShoppingList": ["shopping list", "buy", "groceries"],
++}
++
++
++def classify(text: str):
++    lower = text.lower()
++    best = ("Misc", 0.0)
++    for cat, keys in CATEGORIES.items():
++        score = sum(k in lower for k in keys) / len(keys)
++        if score > best[1]:
++            best = (cat, score)
++    return best
++
++
++def parse_currency_totals(text: str):
++    matches = re.findall(r"(?:total|amount)\s*[:$]?\s*([0-9]+(?:\.[0-9]{2})?)", text.lower())
++    return [float(m) for m in matches]
++
++
++def parse_ingredients(text: str):
++    lines = [l.strip(" -") for l in text.splitlines() if l.strip()]
++    return [l for l in lines if re.search(r"\d", l) or l.startswith("-")]
++
++
++@dataclass
++class Asset:
++    id: str
++    pixel_size: tuple[int, int]
++    file_size: int
++    created_at: int
++
++
++def exact_dupe_groups(assets: list[Asset]):
++    groups = {}
++    for a in assets:
++        k = (a.id, a.pixel_size, a.file_size, a.created_at)
++        groups.setdefault(k, []).append(a.id)
++    return [v for v in groups.values() if len(v) > 1]
++
++
++def near_dupe_score(distance: float):
++    return max(0.0, 1 - min(1.0, distance / 20))
+diff --git a/web/unshot-web/app/globals.css b/web/unshot-web/app/globals.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..0de349f47169dc51e14be9c472941f6907a75279
+--- /dev/null
++++ b/web/unshot-web/app/globals.css
+@@ -0,0 +1,9 @@
++@tailwind base;
++@tailwind components;
++@tailwind utilities;
++
++body {
++  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
++  background: #0b1020;
++  color: #f9fafb;
++}
+diff --git a/web/unshot-web/app/layout.tsx b/web/unshot-web/app/layout.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..08a288d62172aecb1f0d0bd8cd9482b958215b00
+--- /dev/null
++++ b/web/unshot-web/app/layout.tsx
+@@ -0,0 +1,12 @@
++import "./globals.css";
++import { ReactNode } from "react";
++
++export default function RootLayout({ children }: { children: ReactNode }) {
++  return (
++    <html lang="en">
++      <body className="min-h-screen">
++        <main className="mx-auto max-w-5xl p-6">{children}</main>
++      </body>
++    </html>
++  );
++}
+diff --git a/web/unshot-web/app/page.tsx b/web/unshot-web/app/page.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..6e05b47b433eefc386ab76530329a281fac5bd9e
+--- /dev/null
++++ b/web/unshot-web/app/page.tsx
+@@ -0,0 +1,5 @@
++import { PackHub } from "../components/PackHub";
++
++export default function Page() {
++  return <PackHub />;
++}
+diff --git a/web/unshot-web/components/PackHub.tsx b/web/unshot-web/components/PackHub.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..0bd97e3f668422edd7f70d75595a8821feea339b
+--- /dev/null
++++ b/web/unshot-web/components/PackHub.tsx
+@@ -0,0 +1,60 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import { artifactsToCSV, mergePacks, Pack } from "../lib/pack";
++
++export function PackHub() {
++  const [packs, setPacks] = useState<Pack[]>([]);
++
++  const merged = useMemo(() => (packs.length ? mergePacks(packs) : null), [packs]);
++
++  const onFile = async (file: File) => {
++    const text = await file.text();
++    const parsed = JSON.parse(text) as Pack;
++    setPacks((curr) => [...curr, parsed]);
++  };
++
++  const downloadCSV = () => {
++    if (!merged) return;
++    const blob = new Blob([artifactsToCSV(merged.artifacts)], { type: "text/csv" });
++    const a = document.createElement("a");
++    a.href = URL.createObjectURL(blob);
++    a.download = "merged-pack.csv";
++    a.click();
++  };
++
++  return (
++    <div className="space-y-6">
++      <section className="rounded border border-slate-700 p-4">
++        <h1 className="text-2xl font-semibold">Unshot Pack Hub</h1>
++        <p className="text-slate-300">Upload exported Pack JSON files from iOS and merge artifact exports.</p>
++        <input
++          className="mt-4 block"
++          type="file"
++          accept="application/json"
++          onChange={(e) => {
++            const file = e.target.files?.[0];
++            if (file) onFile(file);
++          }}
++        />
++      </section>
++
++      <section className="grid gap-3">
++        {packs.map((pack) => (
++          <article key={pack.id} className="rounded border border-slate-700 p-4">
++            <h2 className="font-semibold">{pack.title}</h2>
++            <p className="text-sm text-slate-300">{pack.artifacts.length} artifacts • {pack.assetIds.length} assets</p>
++          </article>
++        ))}
++      </section>
++
++      {merged && (
++        <section className="rounded border border-emerald-700 p-4">
++          <h2 className="font-semibold">Merged output ready</h2>
++          <p className="text-sm text-slate-300">{merged.artifacts.length} artifacts combined.</p>
++          <button className="mt-3 rounded bg-emerald-600 px-3 py-2" onClick={downloadCSV}>Export merged CSV</button>
++        </section>
++      )}
++    </div>
++  );
++}
+diff --git a/web/unshot-web/lib/pack.ts b/web/unshot-web/lib/pack.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..f5898480c64433756cfe5367f5bef24cee2306a7
+--- /dev/null
++++ b/web/unshot-web/lib/pack.ts
+@@ -0,0 +1,38 @@
++export type Artifact = {
++  id: string;
++  assetId: string;
++  type: string;
++  payload: Record<string, string>;
++};
++
++export type Pack = {
++  id: string;
++  title: string;
++  type: string;
++  createdAt: string;
++  assetIds: string[];
++  artifacts: Artifact[];
++  exports: { path: string; contentType: string; createdAt: string }[];
++};
++
++export function mergePacks(packs: Pack[]): Pack {
++  return {
++    id: "merged-pack",
++    title: "Merged Pack",
++    type: "merged",
++    createdAt: new Date().toISOString(),
++    assetIds: packs.flatMap((p) => p.assetIds),
++    artifacts: packs.flatMap((p) => p.artifacts),
++    exports: []
++  };
++}
++
++export function artifactsToCSV(artifacts: Artifact[]): string {
++  const rows = ["type,assetId,key,value"];
++  for (const artifact of artifacts) {
++    for (const [key, value] of Object.entries(artifact.payload)) {
++      rows.push(`${artifact.type},${artifact.assetId},${key},${String(value).replaceAll(",", " ")}`);
++    }
++  }
++  return rows.join("\n");
++}
+diff --git a/web/unshot-web/next-env.d.ts b/web/unshot-web/next-env.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..1a5eed42ed97d0b65c09aba080d70f2ccfcc1817
+--- /dev/null
++++ b/web/unshot-web/next-env.d.ts
+@@ -0,0 +1,4 @@
++/// <reference types="next" />
++/// <reference types="next/image-types/global" />
++
++// Do not edit this file directly.
+diff --git a/web/unshot-web/package.json b/web/unshot-web/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ee87ef72d116b5cea473315ae3898d61ae0dd80
+--- /dev/null
++++ b/web/unshot-web/package.json
+@@ -0,0 +1,20 @@
++{
++  "name": "unshot-web",
++  "version": "0.1.0",
++  "private": true,
++  "scripts": {
++    "dev": "next dev",
++    "build": "next build",
++    "start": "next start",
++    "lint": "next lint"
++  },
++  "dependencies": {
++    "next": "14.2.5",
++    "react": "18.3.1",
++    "react-dom": "18.3.1"
++  },
++  "devDependencies": {
++    "tailwindcss": "3.4.10",
++    "typescript": "5.5.4"
++  }
++}
+diff --git a/web/unshot-web/tsconfig.json b/web/unshot-web/tsconfig.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..dcdef8aae277484bcef8088931986824b9dd9560
+--- /dev/null
++++ b/web/unshot-web/tsconfig.json
+@@ -0,0 +1,17 @@
++{
++  "compilerOptions": {
++    "target": "es2022",
++    "lib": ["dom", "dom.iterable", "es2022"],
++    "allowJs": false,
++    "skipLibCheck": true,
++    "strict": true,
++    "noEmit": true,
++    "module": "esnext",
++    "moduleResolution": "bundler",
++    "resolveJsonModule": true,
++    "isolatedModules": true,
++    "jsx": "preserve"
++  },
++  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
++  "exclude": ["node_modules"]
++}
 
